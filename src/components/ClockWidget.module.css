@@ -1,0 +1,35 @@
+.time {
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-clock), Harmony, sans-serif;
+  font-size: 25em;
+  font-weight: 300;
+  line-height: 0.5;
+  padding-top: 0.2em;
+  color: #fff;
+}
+
+.hours,
+.minutes {
+  font-variant-numeric: tabular-nums;
+}
+
+.colon {
+  display: inline-block;
+  margin: 0 0.03em;
+  font-stretch: normal;
+  line-height: 0.1;
+  transform: translateY(-0.12em);
+}
+
+.date {
+  font-family: var(--font-display);
+  letter-spacing: 0;
+  color: #ffffffb3;
+  margin: .95rem 0 0;
+  font-size: 3rem;
+  font-weight: 500;
+  text-transform: uppercase;
+}

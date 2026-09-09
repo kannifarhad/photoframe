@@ -1,0 +1,210 @@
+.widget {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 1.5rem;
+  padding: 1rem 1.25rem;
+  color: #fff;
+}
+
+.status {
+  position: relative;
+  z-index: 10;
+  margin: auto;
+  font-family: var(--font-display);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.body {
+  position: relative;
+  z-index: 10;
+  height: 100%;
+  width: 100%;
+  min-width: 0;
+}
+
+.heroIcon {
+  position: absolute;
+  top: 40%;
+  left: 74%;
+  z-index: 10;
+  width: 18rem;
+  height: 18rem;
+  transform: translate(-50%, -50%);
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.grid {
+  position: relative;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: stretch;
+  height: 100%;
+  width: 100%;
+  min-width: 0;
+  gap: 1rem;
+}
+
+.left {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.location {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 4.25rem;
+  font-weight: 200;
+  line-height: 0.9;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.feelsLike {
+  margin: 0.5rem 0 0;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 300;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.temp {
+  margin: 0.15rem 0 0;
+  font-family: var(--font-display);
+  font-size: 5.75rem;
+  font-weight: 200;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  margin-left: -0.1em;
+}
+
+.condition {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 300;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.right {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  width: max-content;
+  margin-left: auto;
+  column-gap: 0.75rem;
+  row-gap: 0.125rem;
+  font-family: var(--font-display);
+  font-size: 1.08rem;
+  font-weight: 300;
+  line-height: 1;
+}
+
+.metricLabel {
+  text-align: left;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.metricValue {
+  text-align: right;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.suns {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.sun {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sunTime {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: -0.25rem;
+}
+
+.sunIcon {
+  /* margin-top: 0.25rem; */
+  width: 3.50rem;
+  height: 3.50rem;
+  object-fit: contain;
+}
+
+.rain {
+  position: absolute;
+  inset: -12% -18%;
+  overflow: hidden;
+  pointer-events: none;
+  transform: rotate(14deg);
+  transform-origin: 50% 0;
+  container-type: size;
+}
+
+.rainDrop {
+  position: absolute;
+  top: 0;
+  border-radius: 1px;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0),
+    rgba(236, 244, 255, 0.95) 40%,
+    rgba(190, 215, 235, 0.2)
+  );
+  animation-name: rain-fall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+
+.rainFar {
+  opacity: 0.35;
+  filter: blur(0.35px);
+}
+
+.rainMid {
+  opacity: 0.62;
+}
+
+.rainNear {
+  opacity: 0.9;
+}
+
+@keyframes rain-fall {
+  from {
+    transform: translate3d(0, -20cqh, 0);
+  }
+  to {
+    transform: translate3d(0, 130cqh, 0);
+  }
+}
