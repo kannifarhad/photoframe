@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const IMAGE_DURATION_MS = 8000;
 const VIDEO_EXTENSIONS = new Set([".mov", ".mp4", ".webm"]);
@@ -25,8 +25,20 @@ function isVideoSrc(src: string): boolean {
 export default function PhotoWidget3D() {
   const [items, setItems] = useState<string[] | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [readySrcs, setReadySrcs] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  const markReady = useCallback((src: string) => {
+    setReadySrcs((current) => {
+      if (current.has(src)) {
+        return current;
+      }
+      const next = new Set(current);
+      next.add(src);
+      return next;
+    });
+  }, []);
 
   const goToNext = useCallback(() => {
     setActiveIndex((current) => {
@@ -59,6 +71,7 @@ export default function PhotoWidget3D() {
 
         setItems(data);
         setActiveIndex(0);
+        setReadySrcs(new Set());
         setError(null);
       } catch (caught) {
         if (caught instanceof DOMException && caught.name === "AbortError") {
@@ -77,11 +90,24 @@ export default function PhotoWidget3D() {
     return () => abortController.abort();
   }, []);
 
+  const visibleIndices = useMemo(() => {
+    if (!items || items.length === 0) {
+      return [];
+    }
+
+    const next = (activeIndex + 1) % items.length;
+    if (next === activeIndex) {
+      return [activeIndex];
+    }
+    return [activeIndex, next];
+  }, [activeIndex, items]);
+
   const activeSrc = items?.[activeIndex] ?? null;
   const activeIsVideo = activeSrc ? isVideoSrc(activeSrc) : false;
+  const activeReady = activeSrc ? readySrcs.has(activeSrc) : false;
 
   useEffect(() => {
-    if (!items || items.length === 0 || activeIsVideo) {
+    if (!items || items.length === 0 || activeIsVideo || !activeReady) {
       return;
     }
 
@@ -90,7 +116,7 @@ export default function PhotoWidget3D() {
     }, IMAGE_DURATION_MS);
 
     return () => window.clearTimeout(timeoutId);
-  }, [activeIndex, activeIsVideo, goToNext, items]);
+  }, [activeIndex, activeIsVideo, activeReady, goToNext, items]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -128,17 +154,16 @@ export default function PhotoWidget3D() {
     };
   }, [activeIndex, activeIsVideo, activeSrc, goToNext]);
 
+  const showLoading =
+    items === null || (items.length > 0 && !error && !activeReady);
+
   return (
     <div className="relative h-full w-full overflow-hidden rounded-3xl font-sans">
-      {items === null ? (
-        <p className="flex h-full items-center justify-center text-slate-400">
-          Loading media…
-        </p>
-      ) : error ? (
+      {error ? (
         <p className="flex h-full items-center justify-center text-slate-300">
           {error}
         </p>
-      ) : items.length === 0 ? (
+      ) : items?.length === 0 ? (
         <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
           <p className="text-lg font-medium tracking-wide text-white">
             No media to display
@@ -149,58 +174,78 @@ export default function PhotoWidget3D() {
           </p>
         </div>
       ) : (
-        <div
-          aria-roledescription="carousel"
-          aria-label="Media gallery"
-          className="absolute inset-0 [mask-image:linear-gradient(to_top_right,transparent_8%,black_52%)] [-webkit-mask-image:linear-gradient(to_top_right,transparent_8%,black_52%)] [mask-size:100%_100%] [-webkit-mask-size:100%_100%] [mask-repeat:no-repeat] [-webkit-mask-repeat:no-repeat]"
-        >
-          {items.map((src, index) => {
-            const isActive = index === activeIndex;
-            const video = isVideoSrc(src);
+        <>
+          {showLoading ? (
+            <p className="flex h-full items-center justify-center text-slate-400">
+              Loading media…
+            </p>
+          ) : null}
+          {items && items.length > 0 ? (
+            <div
+              aria-roledescription="carousel"
+              aria-label="Media gallery"
+              className={`absolute inset-0 [mask-image:linear-gradient(to_top_right,transparent_8%,black_52%)] [-webkit-mask-image:linear-gradient(to_top_right,transparent_8%,black_52%)] [mask-size:100%_100%] [-webkit-mask-size:100%_100%] [mask-repeat:no-repeat] [-webkit-mask-repeat:no-repeat] ${showLoading ? "opacity-0" : ""}`}
+            >
+              {visibleIndices.map((index) => {
+                const src = items[index];
+                const isActive = index === activeIndex;
+                const video = isVideoSrc(src);
+                const ready = readySrcs.has(src);
 
-            if (video && !isActive) {
-              return null;
-            }
+                if (video && !isActive) {
+                  return null;
+                }
 
-            if (video) {
-              return (
-                <video
-                  key={src}
-                  ref={videoRef}
-                  src={src}
-                  aria-hidden={!isActive}
-                  playsInline
-                  preload="auto"
-                  disablePictureInPicture
-                  disableRemotePlayback
-                  className="absolute inset-0 h-full w-full object-cover object-center"
-                  onEnded={() => {
-                    const player = videoRef.current;
-                    if (items.length < 2 && player) {
-                      player.currentTime = 0;
-                      void player.play();
-                      return;
-                    }
-                    goToNext();
-                  }}
-                  onError={() => goToNext()}
-                />
-              );
-            }
+                if (video) {
+                  return (
+                    <video
+                      key={src}
+                      ref={videoRef}
+                      src={src}
+                      aria-hidden={!isActive}
+                      playsInline
+                      preload="auto"
+                      disablePictureInPicture
+                      disableRemotePlayback
+                      className="absolute inset-0 h-full w-full object-cover object-center"
+                      onLoadedData={() => markReady(src)}
+                      onEnded={() => {
+                        const player = videoRef.current;
+                        if (items.length < 2 && player) {
+                          player.currentTime = 0;
+                          void player.play();
+                          return;
+                        }
+                        goToNext();
+                      }}
+                      onError={() => goToNext()}
+                    />
+                  );
+                }
 
-            return (
-              <img
-                key={src}
-                src={src}
-                alt={mediaLabel(src)}
-                draggable={false}
-                aria-hidden={!isActive}
-                className="absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-700 ease-in-out"
-                style={{ opacity: isActive ? 1 : 0 }}
-              />
-            );
-          })}
-        </div>
+                return (
+                  <img
+                    key={src}
+                    src={src}
+                    alt={mediaLabel(src)}
+                    draggable={false}
+                    aria-hidden={!isActive}
+                    className="absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-700 ease-in-out"
+                    style={{ opacity: isActive && ready && !showLoading ? 1 : 0 }}
+                    onLoad={(event) => {
+                      const image = event.currentTarget;
+                      void image.decode().then(
+                        () => markReady(src),
+                        () => markReady(src),
+                      );
+                    }}
+                    onError={() => goToNext()}
+                  />
+                );
+              })}
+            </div>
+          ) : null}
+        </>
       )}
     </div>
   );

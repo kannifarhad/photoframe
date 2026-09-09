@@ -1,7 +1,12 @@
 import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
+import path from "node:path";
 import { Readable } from "node:stream";
 import { contentTypeFor, resolveMediaFile } from "@/lib/media";
+
+export const dynamic = "force-dynamic";
+
+const VIDEO_EXTENSIONS = new Set([".mov", ".mp4", ".webm"]);
 
 function fileStream(
   filePath: string,
@@ -14,6 +19,10 @@ function fileStream(
       : createReadStream(filePath);
 
   return Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
+}
+
+function isVideoName(name: string): boolean {
+  return VIDEO_EXTENSIONS.has(path.extname(name).toLowerCase());
 }
 
 export async function GET(
@@ -36,7 +45,8 @@ export async function GET(
 
     const size = fileStat.size;
     const contentType = contentTypeFor(filename);
-    const rangeHeader = request.headers.get("range");
+    const video = isVideoName(filename);
+    const rangeHeader = video ? request.headers.get("range") : null;
 
     if (rangeHeader) {
       const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader);
@@ -71,6 +81,18 @@ export async function GET(
           "Content-Range": `bytes ${start}-${end}/${size}`,
           "Accept-Ranges": "bytes",
           "Cache-Control": "public, max-age=3600",
+        },
+      });
+    }
+
+    if (!video) {
+      const buffer = await readFile(filePath);
+      return new Response(buffer, {
+        headers: {
+          "Content-Type": contentType,
+          "Content-Length": String(buffer.byteLength),
+          "Cache-Control": "public, max-age=86400",
+          "X-Content-Type-Options": "nosniff",
         },
       });
     }

@@ -2,6 +2,8 @@ import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { getMediaDir, MEDIA_EXTENSIONS } from "@/lib/media";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const photosDir = getMediaDir();
 
