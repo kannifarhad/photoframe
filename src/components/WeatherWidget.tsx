@@ -5,6 +5,7 @@ import styles from "./WeatherWidget.module.css";
 
 const OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast";
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000;
+const RETRY_INTERVAL_MS = 3000;
 const DEFAULT_LATITUDE = 40.4093;
 const DEFAULT_LONGITUDE = 49.8671;
 const DEFAULT_LOCATION = "Baku";
@@ -408,6 +409,7 @@ export default function WeatherWidget({
 
   useEffect(() => {
     const abortController = new AbortController();
+    let timeoutId: number | undefined;
 
     async function loadWeather() {
       try {
@@ -444,6 +446,9 @@ export default function WeatherWidget({
           sunset: data.daily.sunset[0] ?? "",
         });
         setError(null);
+        if (!abortController.signal.aborted) {
+          timeoutId = window.setTimeout(loadWeather, REFRESH_INTERVAL_MS);
+        }
       } catch (caught) {
         if (caught instanceof DOMException && caught.name === "AbortError") {
           return;
@@ -452,15 +457,19 @@ export default function WeatherWidget({
         setError(
           caught instanceof Error ? caught.message : "Unable to load weather",
         );
+        if (!abortController.signal.aborted) {
+          timeoutId = window.setTimeout(loadWeather, RETRY_INTERVAL_MS);
+        }
       }
     }
 
     loadWeather();
-    const intervalId = window.setInterval(loadWeather, REFRESH_INTERVAL_MS);
 
     return () => {
       abortController.abort();
-      window.clearInterval(intervalId);
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
     };
   }, [latitude, longitude]);
 
