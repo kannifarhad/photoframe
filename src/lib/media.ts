@@ -13,7 +13,7 @@ export const MEDIA_EXTENSIONS = new Set([
 export function getMediaDir(): string {
   const raw = process.env.MEDIA_DIR?.trim();
   const configured = raw && raw.length > 0 ? raw : "photos";
-  return path.resolve(process.cwd(), configured);
+  return path.resolve(/* turbopackIgnore: true */ process.cwd(), configured);
 }
 
 export function isAllowedMediaName(name: string): boolean {
@@ -30,7 +30,7 @@ export function resolveMediaFile(name: string): string | null {
   }
 
   const dir = getMediaDir();
-  const resolved = path.resolve(dir, name);
+  const resolved = path.resolve(/* turbopackIgnore: true */ dir, name);
   const prefix = dir.endsWith(path.sep) ? dir : `${dir}${path.sep}`;
 
   if (resolved !== dir && !resolved.startsWith(prefix)) {
