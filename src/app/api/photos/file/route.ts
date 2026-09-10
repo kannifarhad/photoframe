@@ -25,12 +25,14 @@ function isVideoName(name: string): boolean {
   return VIDEO_EXTENSIONS.has(path.extname(name).toLowerCase());
 }
 
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ filename: string }> },
-) {
-  const { filename: rawName } = await params;
-  const filename = decodeURIComponent(rawName);
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const filename = url.searchParams.get("name");
+
+  if (!filename) {
+    return new Response("Not found", { status: 404 });
+  }
+
   const filePath = resolveMediaFile(filename);
 
   if (!filePath) {

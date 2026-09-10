@@ -18,7 +18,9 @@ export async function GET() {
         const extension = path.extname(entry.name).toLowerCase();
         return MEDIA_EXTENSIONS.has(extension);
       })
-      .map((entry) => `/api/photos/${encodeURIComponent(entry.name)}`);
+      .map(
+        (entry) => `/api/photos/file?name=${encodeURIComponent(entry.name)}`,
+      );
 
     return Response.json(photos);
   } catch (error) {

@@ -1,19 +1,33 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import styles from "./PhotoWidget3D.module.css";
 
 const IMAGE_DURATION_MS = 8000;
+const FADE_MS = 800;
 const VIDEO_EXTENSIONS = new Set([".mov", ".mp4", ".webm"]);
 
+function filenameFromSrc(src: string): string {
+  try {
+    return new URL(src, "http://local").searchParams.get("name") ?? src;
+  } catch {
+    return src;
+  }
+}
+
 function mediaLabel(src: string): string {
-  const filename = src.split("/").pop() ?? "Media";
-  return decodeURIComponent(
-    filename.replace(/\.[^.]+$/, "").replace(/-/g, " "),
-  );
+  const filename = filenameFromSrc(src);
+  try {
+    return decodeURIComponent(
+      filename.replace(/\.[^.]+$/, "").replace(/-/g, " "),
+    );
+  } catch {
+    return filename;
+  }
 }
 
 function extensionOf(src: string): string {
-  const filename = src.split("/").pop() ?? "";
+  const filename = filenameFromSrc(src);
   const dot = filename.lastIndexOf(".");
   return dot === -1 ? "" : filename.slice(dot).toLowerCase();
 }
@@ -24,30 +38,29 @@ function isVideoSrc(src: string): boolean {
 
 export default function PhotoWidget3D() {
   const [items, setItems] = useState<string[] | null>(null);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [readySrcs, setReadySrcs] = useState<Set<string>>(() => new Set());
+  const [baseIndex, setBaseIndex] = useState(0);
+  const [incomingIndex, setIncomingIndex] = useState<number | null>(null);
+  const [incomingOn, setIncomingOn] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  const markReady = useCallback((src: string) => {
-    setReadySrcs((current) => {
-      if (current.has(src)) {
-        return current;
-      }
-      const next = new Set(current);
-      next.add(src);
-      return next;
-    });
-  }, []);
-
   const goToNext = useCallback(() => {
-    setActiveIndex((current) => {
-      if (!items || items.length === 0) {
-        return current;
-      }
-      return (current + 1) % items.length;
-    });
-  }, [items]);
+    if (!items || items.length < 2 || incomingIndex !== null) {
+      return;
+    }
+
+    const nextIndex = (baseIndex + 1) % items.length;
+    const fromVideo = isVideoSrc(items[baseIndex]);
+    const toVideo = isVideoSrc(items[nextIndex]);
+
+    if (fromVideo || toVideo) {
+      setBaseIndex(nextIndex);
+      return;
+    }
+
+    setIncomingIndex(nextIndex);
+    setIncomingOn(false);
+  }, [baseIndex, incomingIndex, items]);
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -70,8 +83,9 @@ export default function PhotoWidget3D() {
         }
 
         setItems(data);
-        setActiveIndex(0);
-        setReadySrcs(new Set());
+        setBaseIndex(0);
+        setIncomingIndex(null);
+        setIncomingOn(false);
         setError(null);
       } catch (caught) {
         if (caught instanceof DOMException && caught.name === "AbortError") {
@@ -90,24 +104,42 @@ export default function PhotoWidget3D() {
     return () => abortController.abort();
   }, []);
 
-  const visibleIndices = useMemo(() => {
-    if (!items || items.length === 0) {
-      return [];
+  useEffect(() => {
+    if (incomingIndex === null) {
+      return;
     }
 
-    const next = (activeIndex + 1) % items.length;
-    if (next === activeIndex) {
-      return [activeIndex];
-    }
-    return [activeIndex, next];
-  }, [activeIndex, items]);
+    const frame = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        setIncomingOn(true);
+      });
+    });
 
-  const activeSrc = items?.[activeIndex] ?? null;
-  const activeIsVideo = activeSrc ? isVideoSrc(activeSrc) : false;
-  const activeReady = activeSrc ? readySrcs.has(activeSrc) : false;
+    const done = window.setTimeout(() => {
+      setBaseIndex(incomingIndex);
+      setIncomingIndex(null);
+      setIncomingOn(false);
+    }, FADE_MS);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(done);
+    };
+  }, [incomingIndex]);
+
+  const baseSrc = items?.[baseIndex] ?? null;
+  const baseIsVideo = baseSrc ? isVideoSrc(baseSrc) : false;
+  const incomingSrc =
+    items && incomingIndex !== null ? items[incomingIndex] : null;
+  const nextIndex =
+    items && items.length > 1 ? (baseIndex + 1) % items.length : null;
+  const nextSrc =
+    nextIndex !== null && items && !isVideoSrc(items[nextIndex])
+      ? items[nextIndex]
+      : null;
 
   useEffect(() => {
-    if (!items || items.length === 0 || activeIsVideo || !activeReady) {
+    if (!items || items.length === 0 || baseIsVideo || incomingIndex !== null) {
       return;
     }
 
@@ -116,11 +148,11 @@ export default function PhotoWidget3D() {
     }, IMAGE_DURATION_MS);
 
     return () => window.clearTimeout(timeoutId);
-  }, [activeIndex, activeIsVideo, activeReady, goToNext, items]);
+  }, [baseIndex, baseIsVideo, goToNext, incomingIndex, items]);
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !activeIsVideo) {
+    if (!video || !baseIsVideo) {
       return;
     }
 
@@ -152,18 +184,19 @@ export default function PhotoWidget3D() {
       cancelled = true;
       video.pause();
     };
-  }, [activeIndex, activeIsVideo, activeSrc, goToNext]);
-
-  const showLoading =
-    items === null || (items.length > 0 && !error && !activeReady);
+  }, [baseIndex, baseIsVideo, baseSrc, goToNext]);
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-3xl font-sans">
-      {error ? (
+      {items === null ? (
+        <p className="flex h-full items-center justify-center text-slate-400">
+          Loading media…
+        </p>
+      ) : error ? (
         <p className="flex h-full items-center justify-center text-slate-300">
           {error}
         </p>
-      ) : items?.length === 0 ? (
+      ) : items.length === 0 ? (
         <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
           <p className="text-lg font-medium tracking-wide text-white">
             No media to display
@@ -174,78 +207,56 @@ export default function PhotoWidget3D() {
           </p>
         </div>
       ) : (
-        <>
-          {showLoading ? (
-            <p className="flex h-full items-center justify-center text-slate-400">
-              Loading media…
-            </p>
+        <div
+          aria-roledescription="carousel"
+          aria-label="Media gallery"
+          className={styles.stage}
+        >
+          {nextSrc && nextSrc !== incomingSrc ? (
+            <img src={nextSrc} alt="" className={styles.preload} />
           ) : null}
-          {items && items.length > 0 ? (
-            <div
-              aria-roledescription="carousel"
-              aria-label="Media gallery"
-              className={`absolute inset-0 [mask-image:linear-gradient(to_top_right,transparent_8%,black_52%)] [-webkit-mask-image:linear-gradient(to_top_right,transparent_8%,black_52%)] [mask-size:100%_100%] [-webkit-mask-size:100%_100%] [mask-repeat:no-repeat] [-webkit-mask-repeat:no-repeat] ${showLoading ? "opacity-0" : ""}`}
-            >
-              {visibleIndices.map((index) => {
-                const src = items[index];
-                const isActive = index === activeIndex;
-                const video = isVideoSrc(src);
-                const ready = readySrcs.has(src);
 
-                if (video && !isActive) {
-                  return null;
+          {baseIsVideo && baseSrc ? (
+            <video
+              key={baseSrc}
+              ref={videoRef}
+              src={baseSrc}
+              playsInline
+              preload="auto"
+              disablePictureInPicture
+              disableRemotePlayback
+              className={`${styles.frame} ${styles.base}`}
+              onEnded={() => {
+                const player = videoRef.current;
+                if (items.length < 2 && player) {
+                  player.currentTime = 0;
+                  void player.play();
+                  return;
                 }
-
-                if (video) {
-                  return (
-                    <video
-                      key={src}
-                      ref={videoRef}
-                      src={src}
-                      aria-hidden={!isActive}
-                      playsInline
-                      preload="auto"
-                      disablePictureInPicture
-                      disableRemotePlayback
-                      className="absolute inset-0 h-full w-full object-cover object-center"
-                      onLoadedData={() => markReady(src)}
-                      onEnded={() => {
-                        const player = videoRef.current;
-                        if (items.length < 2 && player) {
-                          player.currentTime = 0;
-                          void player.play();
-                          return;
-                        }
-                        goToNext();
-                      }}
-                      onError={() => goToNext()}
-                    />
-                  );
-                }
-
-                return (
-                  <img
-                    key={src}
-                    src={src}
-                    alt={mediaLabel(src)}
-                    draggable={false}
-                    aria-hidden={!isActive}
-                    className="absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-700 ease-in-out"
-                    style={{ opacity: isActive && ready && !showLoading ? 1 : 0 }}
-                    onLoad={(event) => {
-                      const image = event.currentTarget;
-                      void image.decode().then(
-                        () => markReady(src),
-                        () => markReady(src),
-                      );
-                    }}
-                    onError={() => goToNext()}
-                  />
-                );
-              })}
-            </div>
+                goToNext();
+              }}
+              onError={() => goToNext()}
+            />
+          ) : baseSrc ? (
+            <img
+              src={baseSrc}
+              alt={mediaLabel(baseSrc)}
+              draggable={false}
+              className={`${styles.frame} ${styles.base}`}
+              onError={() => goToNext()}
+            />
           ) : null}
-        </>
+
+          {incomingSrc ? (
+            <img
+              src={incomingSrc}
+              alt={mediaLabel(incomingSrc)}
+              draggable={false}
+              className={`${styles.frame} ${styles.incoming} ${incomingOn ? styles.incomingOn : ""}`}
+              onError={() => goToNext()}
+            />
+          ) : null}
+        </div>
       )}
     </div>
   );

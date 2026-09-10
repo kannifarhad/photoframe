@@ -496,15 +496,16 @@ export default function WeatherWidget({
           <div className={styles.grid}>
             <div className={styles.left}>
               <div>
-                <p className={styles.location}>{location}</p>
-                <p className={styles.feelsLike}>
-                  Feels like {formatDegrees(weather.feelsLike)}
-                </p>
+                <p className={styles.location}>{condition.label}</p>
+               
               </div>
               <div>
-                <p className={styles.condition}>{condition.label}</p>
+                {/* <p className={styles.condition}>{location}</p> */}
                 <p className={styles.temp}>
                   {Math.round(weather.temperature)}°C
+                </p>
+                <p className={styles.feelsLike}>
+                  Feels like {formatDegrees(weather.feelsLike)}
                 </p>
               </div>
             </div>

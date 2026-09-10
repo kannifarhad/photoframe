@@ -44,6 +44,27 @@ body {
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
+.kiosk-bg-pattern {
+  position: absolute;
+  inset: 0;
+  background-color: #090d16;
+  background-image: url("/backround.jpg");
+  background-repeat: repeat;
+  background-position: center;
+  background-size: 60rem;
+}
+
+.kiosk-bg-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom left,
+    rgba(9, 13, 22, 0.12) 0%,
+    rgba(9, 13, 22, 0.45) 42%,
+    rgba(9, 13, 22, 0.88) 100%
+  );
+}
+
 @keyframes weather-drift {
   from {
     transform: translateX(-12%);
