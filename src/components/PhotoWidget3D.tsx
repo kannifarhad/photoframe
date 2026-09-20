@@ -5,6 +5,7 @@ import styles from "./PhotoWidget3D.module.css";
 
 const IMAGE_DURATION_MS = 8000;
 const FADE_MS = 800;
+const POLL_INTERVAL_MS = 30_000;
 const VIDEO_EXTENSIONS = new Set([".mov", ".mp4", ".webm"]);
 
 function filenameFromSrc(src: string): string {
@@ -36,6 +37,13 @@ function isVideoSrc(src: string): boolean {
   return VIDEO_EXTENSIONS.has(extensionOf(src));
 }
 
+function listsEqual(left: string[], right: string[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every((item, index) => item === right[index])
+  );
+}
+
 export default function PhotoWidget3D() {
   const [items, setItems] = useState<string[] | null>(null);
   const [baseIndex, setBaseIndex] = useState(0);
@@ -43,6 +51,11 @@ export default function PhotoWidget3D() {
   const [incomingOn, setIncomingOn] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const itemsRef = useRef<string[] | null>(null);
+  const baseIndexRef = useRef(0);
+
+  itemsRef.current = items;
+  baseIndexRef.current = baseIndex;
 
   const goToNext = useCallback(() => {
     if (!items || items.length < 2 || incomingIndex !== null) {
@@ -67,7 +80,8 @@ export default function PhotoWidget3D() {
 
     async function loadMedia() {
       try {
-        const response = await fetch("/api/photos", {
+        const response = await fetch(`/api/photos?t=${Date.now()}`, {
+          cache: "no-store",
           signal: abortController.signal,
         });
         if (!response.ok) {
@@ -82,13 +96,28 @@ export default function PhotoWidget3D() {
           throw new Error("Invalid media response");
         }
 
-        setItems(data);
-        setBaseIndex(0);
+        const nextItems = data as string[];
+        const currentItems = itemsRef.current;
+
+        if (currentItems && listsEqual(currentItems, nextItems)) {
+          setError(null);
+          return;
+        }
+
+        const currentSrc = currentItems?.[baseIndexRef.current];
+        const keptIndex = currentSrc ? nextItems.indexOf(currentSrc) : -1;
+
+        setItems(nextItems);
+        setBaseIndex(keptIndex === -1 ? 0 : keptIndex);
         setIncomingIndex(null);
         setIncomingOn(false);
         setError(null);
       } catch (caught) {
         if (caught instanceof DOMException && caught.name === "AbortError") {
+          return;
+        }
+
+        if (itemsRef.current && itemsRef.current.length > 0) {
           return;
         }
 
@@ -100,8 +129,12 @@ export default function PhotoWidget3D() {
     }
 
     loadMedia();
+    const intervalId = window.setInterval(loadMedia, POLL_INTERVAL_MS);
 
-    return () => abortController.abort();
+    return () => {
+      abortController.abort();
+      window.clearInterval(intervalId);
+    };
   }, []);
 
   useEffect(() => {
