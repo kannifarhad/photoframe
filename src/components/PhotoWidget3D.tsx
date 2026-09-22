@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "./PhotoWidget3D.module.css";
 
+
+
 const IMAGE_DURATION_MS = 8000;
 const FADE_MS = 800;
 const POLL_INTERVAL_MS = 30_000;
