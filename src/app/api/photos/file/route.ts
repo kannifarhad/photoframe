@@ -1,111 +1,132 @@
-import { createReadStream } from "node:fs";
-import { readFile, stat } from "node:fs/promises";
-import path from "node:path";
-import { Readable } from "node:stream";
-import { contentTypeFor, resolveMediaFile } from "@/lib/media";
+import { playableMedia, readFileRange } from "@/lib/derived-media";
+import { resolveMediaFile } from "@/lib/media";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-const VIDEO_EXTENSIONS = new Set([".mov", ".mp4", ".webm"]);
+const VIDEO_TYPES = new Set(["video/mp4", "video/webm", "video/quicktime"]);
 
-function fileStream(
-  filePath: string,
-  start?: number,
-  end?: number,
-): ReadableStream<Uint8Array> {
-  const nodeStream =
-    start !== undefined && end !== undefined
-      ? createReadStream(filePath, { start, end })
-      : createReadStream(filePath);
+function parseRange(
+  rangeHeader: string | null,
+  size: number,
+): { start: number; end: number } | null | "invalid" {
+  if (!rangeHeader) {
+    return null;
+  }
 
-  return Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
+  const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader);
+  if (!match) {
+    return "invalid";
+  }
+
+  const start = match[1] ? Number(match[1]) : 0;
+  const end = match[2] ? Number(match[2]) : size - 1;
+  if (
+    !Number.isFinite(start) ||
+    !Number.isFinite(end) ||
+    start < 0 ||
+    end >= size ||
+    start > end
+  ) {
+    return "invalid";
+  }
+
+  return { start, end };
 }
 
-function isVideoName(name: string): boolean {
-  return VIDEO_EXTENSIONS.has(path.extname(name).toLowerCase());
+function mediaHeaders(
+  contentType: string,
+  size: number,
+  extra: Record<string, string> = {},
+): HeadersInit {
+  const video = VIDEO_TYPES.has(contentType);
+  return {
+    "Content-Type": contentType,
+    "Content-Length": String(size),
+    "Accept-Ranges": "bytes",
+    "Cache-Control": video
+      ? "no-store, max-age=0"
+      : "public, max-age=86400",
+    "X-Content-Type-Options": "nosniff",
+    ...extra,
+  };
 }
 
-export async function GET(request: Request) {
+async function resolvePlayable(request: Request) {
   const url = new URL(request.url);
   const filename = url.searchParams.get("name");
-
   if (!filename) {
-    return new Response("Not found", { status: 404 });
+    return null;
   }
 
   const filePath = resolveMediaFile(filename);
-
   if (!filePath) {
-    return new Response("Not found", { status: 404 });
+    return null;
   }
 
+  return { filename, ...(await playableMedia(filePath, filename)) };
+}
+
+export async function HEAD(request: Request) {
   try {
-    const fileStat = await stat(filePath);
-    if (!fileStat.isFile()) {
+    const playable = await resolvePlayable(request);
+    if (!playable) {
       return new Response("Not found", { status: 404 });
     }
 
-    const size = fileStat.size;
-    const contentType = contentTypeFor(filename);
-    const video = isVideoName(filename);
-    const rangeHeader = video ? request.headers.get("range") : null;
+    return new Response(null, {
+      headers: mediaHeaders(playable.contentType, playable.size),
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
+      return new Response("Not found", { status: 404 });
+    }
+    throw error;
+  }
+}
 
-    if (rangeHeader) {
-      const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader);
-      if (!match) {
-        return new Response(null, {
-          status: 416,
-          headers: { "Content-Range": `bytes */${size}` },
-        });
-      }
+export async function GET(request: Request) {
+  try {
+    const playable = await resolvePlayable(request);
+    if (!playable) {
+      return new Response("Not found", { status: 404 });
+    }
 
-      const start = match[1] ? Number(match[1]) : 0;
-      const end = match[2] ? Number(match[2]) : size - 1;
+    const { filePath, contentType, size } = playable;
+    const range = parseRange(
+      VIDEO_TYPES.has(contentType) ? request.headers.get("range") : null,
+      size,
+    );
 
-      if (
-        !Number.isFinite(start) ||
-        !Number.isFinite(end) ||
-        start < 0 ||
-        end >= size ||
-        start > end
-      ) {
-        return new Response(null, {
-          status: 416,
-          headers: { "Content-Range": `bytes */${size}` },
-        });
-      }
-
-      return new Response(fileStream(filePath, start, end), {
-        status: 206,
+    if (range === "invalid") {
+      return new Response(null, {
+        status: 416,
         headers: {
-          "Content-Type": contentType,
-          "Content-Length": String(end - start + 1),
-          "Content-Range": `bytes ${start}-${end}/${size}`,
+          "Content-Range": `bytes */${size}`,
           "Accept-Ranges": "bytes",
-          "Cache-Control": "public, max-age=3600",
+          "Cache-Control": "no-store, max-age=0",
         },
       });
     }
 
-    if (!video) {
-      const buffer = await readFile(filePath);
-      return new Response(buffer, {
-        headers: {
-          "Content-Type": contentType,
-          "Content-Length": String(buffer.byteLength),
-          "Cache-Control": "public, max-age=86400",
-          "X-Content-Type-Options": "nosniff",
-        },
+    if (range) {
+      const body = await readFileRange(filePath, range.start, range.end);
+      return new Response(body, {
+        status: 206,
+        headers: mediaHeaders(contentType, body.byteLength, {
+          "Content-Range": `bytes ${range.start}-${range.end}/${size}`,
+        }),
       });
     }
 
-    return new Response(fileStream(filePath), {
-      headers: {
-        "Content-Type": contentType,
-        "Content-Length": String(size),
-        "Accept-Ranges": "bytes",
-        "Cache-Control": "public, max-age=3600",
-      },
+    const body = await readFileRange(filePath, 0, size - 1);
+    return new Response(body, {
+      headers: mediaHeaders(contentType, body.byteLength),
     });
   } catch (error) {
     if (

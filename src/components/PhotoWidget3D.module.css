@@ -34,3 +34,39 @@
   opacity: 0;
   pointer-events: none;
 }
+
+.caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0;
+  padding: 2.75rem 1.4rem 1.15rem;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.58), transparent 70%);
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.92);
+  pointer-events: none;
+}
+
+.place,
+.taken {
+  margin: 0;
+}
+
+.place {
+  font-size: 1.25rem;
+  font-weight: 300;
+  letter-spacing: 0.1em;
+}
+
+.taken {
+  font-size: 0.95rem;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.78);
+}

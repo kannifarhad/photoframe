@@ -1,7 +1,9 @@
 import { readdir } from "node:fs/promises";
-import path from "node:path";
-import { getMediaDir, MEDIA_EXTENSIONS } from "@/lib/media";
+import { warmupPlayable } from "@/lib/derived-media";
+import { getMediaDir, isAllowedMediaName, resolveMediaFile } from "@/lib/media";
+import { metadataForMediaFile } from "@/lib/photo-location";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -14,18 +16,23 @@ export async function GET() {
 
   try {
     const entries = await readdir(photosDir, { withFileTypes: true });
-    const photos = entries
-      .filter((entry) => {
-        if (!entry.isFile()) {
-          return false;
-        }
+    const files = entries.filter(
+      (entry) => entry.isFile() && isAllowedMediaName(entry.name),
+    );
 
-        const extension = path.extname(entry.name).toLowerCase();
-        return MEDIA_EXTENSIONS.has(extension);
-      })
-      .map(
-        (entry) => `/api/photos/file?name=${encodeURIComponent(entry.name)}`,
-      );
+    const photos = await Promise.all(
+      files.map(async (entry) => {
+        const src = `/api/photos/file?name=${encodeURIComponent(entry.name)}`;
+        const filePath = resolveMediaFile(entry.name);
+        if (filePath) {
+          warmupPlayable(filePath, entry.name);
+        }
+        const meta = filePath
+          ? await metadataForMediaFile(filePath, entry.name)
+          : { location: null, takenAt: null };
+        return { src, ...meta };
+      }),
+    );
 
     return Response.json(photos, { headers: NO_STORE_HEADERS });
   } catch (error) {

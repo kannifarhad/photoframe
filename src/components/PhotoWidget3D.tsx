@@ -37,21 +37,56 @@ function isVideoSrc(src: string): boolean {
   return VIDEO_EXTENSIONS.has(extensionOf(src));
 }
 
-function listsEqual(left: string[], right: string[]): boolean {
+type GalleryItem = {
+  src: string;
+  location: string | null;
+  takenAt: string | null;
+};
+
+function isGalleryItem(value: unknown): value is GalleryItem {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const item = value as {
+    src?: unknown;
+    location?: unknown;
+    takenAt?: unknown;
+  };
+  return (
+    typeof item.src === "string" &&
+    (item.location === null || typeof item.location === "string") &&
+    (item.takenAt === null || typeof item.takenAt === "string")
+  );
+}
+
+function listsEqual(left: GalleryItem[], right: GalleryItem[]): boolean {
   return (
     left.length === right.length &&
-    left.every((item, index) => item === right[index])
+    left.every(
+      (item, index) =>
+        item.src === right[index].src &&
+        item.location === right[index].location &&
+        item.takenAt === right[index].takenAt,
+    )
+  );
+}
+
+function srcsEqual(left: GalleryItem[], right: GalleryItem[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every((item, index) => item.src === right[index].src)
   );
 }
 
 export default function PhotoWidget3D() {
-  const [items, setItems] = useState<string[] | null>(null);
+  const [items, setItems] = useState<GalleryItem[] | null>(null);
   const [baseIndex, setBaseIndex] = useState(0);
   const [incomingIndex, setIncomingIndex] = useState<number | null>(null);
   const [incomingOn, setIncomingOn] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const itemsRef = useRef<string[] | null>(null);
+  const itemsRef = useRef<GalleryItem[] | null>(null);
   const baseIndexRef = useRef(0);
 
   itemsRef.current = items;
@@ -63,8 +98,8 @@ export default function PhotoWidget3D() {
     }
 
     const nextIndex = (baseIndex + 1) % items.length;
-    const fromVideo = isVideoSrc(items[baseIndex]);
-    const toVideo = isVideoSrc(items[nextIndex]);
+    const fromVideo = isVideoSrc(items[baseIndex].src);
+    const toVideo = isVideoSrc(items[nextIndex].src);
 
     if (fromVideo || toVideo) {
       setBaseIndex(nextIndex);
@@ -89,14 +124,11 @@ export default function PhotoWidget3D() {
         }
 
         const data: unknown = await response.json();
-        if (
-          !Array.isArray(data) ||
-          data.some((item) => typeof item !== "string")
-        ) {
+        if (!Array.isArray(data) || !data.every(isGalleryItem)) {
           throw new Error("Invalid media response");
         }
 
-        const nextItems = data as string[];
+        const nextItems = data;
         const currentItems = itemsRef.current;
 
         if (currentItems && listsEqual(currentItems, nextItems)) {
@@ -104,8 +136,16 @@ export default function PhotoWidget3D() {
           return;
         }
 
-        const currentSrc = currentItems?.[baseIndexRef.current];
-        const keptIndex = currentSrc ? nextItems.indexOf(currentSrc) : -1;
+        if (currentItems && srcsEqual(currentItems, nextItems)) {
+          setItems(nextItems);
+          setError(null);
+          return;
+        }
+
+        const currentSrc = currentItems?.[baseIndexRef.current]?.src;
+        const keptIndex = currentSrc
+          ? nextItems.findIndex((item) => item.src === currentSrc)
+          : -1;
 
         setItems(nextItems);
         setBaseIndex(keptIndex === -1 ? 0 : keptIndex);
@@ -160,16 +200,25 @@ export default function PhotoWidget3D() {
     };
   }, [incomingIndex]);
 
-  const baseSrc = items?.[baseIndex] ?? null;
+  const baseSrc = items?.[baseIndex]?.src ?? null;
+  const baseLocation = items?.[baseIndex]?.location ?? null;
+  const baseTakenAt = items?.[baseIndex]?.takenAt ?? null;
   const baseIsVideo = baseSrc ? isVideoSrc(baseSrc) : false;
   const incomingSrc =
-    items && incomingIndex !== null ? items[incomingIndex] : null;
+    items && incomingIndex !== null ? items[incomingIndex].src : null;
+  const incomingLocation =
+    items && incomingIndex !== null ? items[incomingIndex].location : null;
+  const incomingTakenAt =
+    items && incomingIndex !== null ? items[incomingIndex].takenAt : null;
   const nextIndex =
     items && items.length > 1 ? (baseIndex + 1) % items.length : null;
   const nextSrc =
-    nextIndex !== null && items && !isVideoSrc(items[nextIndex])
-      ? items[nextIndex]
+    nextIndex !== null && items && !isVideoSrc(items[nextIndex].src)
+      ? items[nextIndex].src
       : null;
+  const captionLocation = incomingOn ? incomingLocation : baseLocation;
+  const captionTakenAt = incomingOn ? incomingTakenAt : baseTakenAt;
+  const hasCaption = Boolean(captionLocation || captionTakenAt);
 
   useEffect(() => {
     if (!items || items.length === 0 || baseIsVideo || incomingIndex !== null) {
@@ -288,6 +337,17 @@ export default function PhotoWidget3D() {
               className={`${styles.frame} ${styles.incoming} ${incomingOn ? styles.incomingOn : ""}`}
               onError={() => goToNext()}
             />
+          ) : null}
+
+          {hasCaption ? (
+            <div className={styles.caption}>
+              {captionLocation ? (
+                <p className={styles.place}>{captionLocation}</p>
+              ) : null}
+              {captionTakenAt ? (
+                <p className={styles.taken}>{captionTakenAt}</p>
+              ) : null}
+            </div>
           ) : null}
         </div>
       )}

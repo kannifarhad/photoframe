@@ -5,6 +5,8 @@ export const MEDIA_EXTENSIONS = new Set([
   ".jpeg",
   ".png",
   ".webp",
+  ".heic",
+  ".heif",
   ".mov",
   ".mp4",
   ".webm",
@@ -17,7 +19,7 @@ export function getMediaDir(): string {
 }
 
 export function isAllowedMediaName(name: string): boolean {
-  if (!name || name !== path.basename(name) || name.includes("\0")) {
+  if (!name || name.startsWith(".") || name !== path.basename(name) || name.includes("\0")) {
     return false;
   }
 
@@ -49,8 +51,12 @@ export function contentTypeFor(name: string): string {
       return "image/png";
     case ".webp":
       return "image/webp";
+    case ".heic":
+      return "image/heic";
+    case ".heif":
+      return "image/heif";
     case ".mov":
-      return "video/quicktime";
+      return "video/mp4";
     case ".mp4":
       return "video/mp4";
     case ".webm":
