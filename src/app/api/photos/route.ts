@@ -1,7 +1,7 @@
 import { readdir } from "node:fs/promises";
-import { warmupPlayable } from "@/lib/derived-media";
+import { pruneDerivedCache, warmupPlayable } from "@/lib/derived-media";
 import { getMediaDir, isAllowedMediaName, resolveMediaFile } from "@/lib/media";
-import { metadataForMediaFile } from "@/lib/photo-location";
+import { metadataForMediaFile, pruneMetadataCache } from "@/lib/photo-location";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +19,10 @@ export async function GET() {
     const files = entries.filter(
       (entry) => entry.isFile() && isAllowedMediaName(entry.name),
     );
+
+    const names = files.map((entry) => entry.name);
+    pruneMetadataCache(names);
+    void pruneDerivedCache(names);
 
     const photos = await Promise.all(
       files.map(async (entry) => {

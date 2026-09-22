@@ -382,3 +382,12 @@ export async function metadataForMediaFile(
     return { location: null, takenAt: null };
   }
 }
+
+export function pruneMetadataCache(names: string[]): void {
+  const keep = new Set(names);
+  for (const key of fileCache.keys()) {
+    if (!keep.has(key)) {
+      fileCache.delete(key);
+    }
+  }
+}

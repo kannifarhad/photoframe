@@ -1,4 +1,4 @@
-import { playableMedia, readFileRange } from "@/lib/derived-media";
+import { fileStream, playableMedia } from "@/lib/derived-media";
 import { resolveMediaFile } from "@/lib/media";
 
 export const runtime = "nodejs";
@@ -115,18 +115,17 @@ export async function GET(request: Request) {
     }
 
     if (range) {
-      const body = await readFileRange(filePath, range.start, range.end);
-      return new Response(body, {
+      const length = range.end - range.start + 1;
+      return new Response(fileStream(filePath, range.start, range.end), {
         status: 206,
-        headers: mediaHeaders(contentType, body.byteLength, {
+        headers: mediaHeaders(contentType, length, {
           "Content-Range": `bytes ${range.start}-${range.end}/${size}`,
         }),
       });
     }
 
-    const body = await readFileRange(filePath, 0, size - 1);
-    return new Response(body, {
-      headers: mediaHeaders(contentType, body.byteLength),
+    return new Response(fileStream(filePath, 0, size - 1), {
+      headers: mediaHeaders(contentType, size),
     });
   } catch (error) {
     if (

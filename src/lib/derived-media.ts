@@ -1,7 +1,9 @@
+import { createReadStream } from "node:fs";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, open, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rename, stat, unlink, writeFile, readFile } from "node:fs/promises";
 import path from "node:path";
+import { Readable } from "node:stream";
 import ffmpegStatic from "ffmpeg-static";
 import convert from "heic-convert";
 import { contentTypeFor, getMediaDir } from "@/lib/media";
@@ -80,7 +82,7 @@ function ffmpegBin(): string {
 
 function runFfmpeg(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(ffmpegBin(), args, {
+    const child = spawn(/* turbopackIgnore: true */ ffmpegBin(), args, {
       stdio: ["ignore", "ignore", "pipe"],
     });
     let stderr = "";
@@ -213,18 +215,54 @@ export function warmupPlayable(filePath: string, name: string): void {
   void playableMedia(filePath, name).catch(() => undefined);
 }
 
-export async function readFileRange(
+export async function pruneDerivedCache(names: string[]): Promise<void> {
+  const dir = cacheDir();
+  let entries: string[];
+  try {
+    entries = await readdir(dir);
+  } catch {
+    return;
+  }
+
+  const keep = new Set<string>();
+  await Promise.all(
+    names.map(async (name) => {
+      const filePath = path.join(getMediaDir(), name);
+      try {
+        const fileStat = await stat(filePath);
+        if (isHeicName(name)) {
+          keep.add(path.basename(cachePath(name, fileStat.mtimeMs, ".jpg")));
+        }
+        if (isQuickTimeName(name)) {
+          keep.add(path.basename(cachePath(name, fileStat.mtimeMs, ".mp4")));
+        }
+      } catch {
+        return;
+      }
+    }),
+  );
+
+  await Promise.all(
+    entries.map(async (entry) => {
+      if (entry.startsWith(".") || entry.includes(".tmp")) {
+        return;
+      }
+      if (keep.has(entry)) {
+        return;
+      }
+      await unlink(path.join(dir, entry)).catch(() => undefined);
+    }),
+  );
+}
+
+export function fileStream(
   filePath: string,
   start: number,
   end: number,
-): Promise<Buffer> {
-  const length = end - start + 1;
-  const buffer = Buffer.alloc(length);
-  const fh = await open(filePath, "r");
-  try {
-    const { bytesRead } = await fh.read({ buffer, position: start });
-    return bytesRead === length ? buffer : buffer.subarray(0, bytesRead);
-  } finally {
-    await fh.close();
-  }
+): ReadableStream<Uint8Array> {
+  const nodeStream = createReadStream(/* turbopackIgnore: true */ filePath, {
+    start,
+    end,
+  });
+  return Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
 }

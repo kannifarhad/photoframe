@@ -25,9 +25,9 @@ Point `MEDIA_DIR` at the folder of images and videos (see `.env.example`).
 
 ## Supported media
 
-The kiosk Chromium build cannot display HEIC or HEVC `.MOV` files as-is, so those are converted on first load and cached in `MEDIA_DIR/.cache`:
+The kiosk Chromium build cannot display HEIC or HEVC `.MOV` files as-is, so those are converted on first load and stored as **files on disk** in `MEDIA_DIR/.cache` (not in RAM):
 
 - **HEIC/HEIF** → JPEG
 - **HEVC MOV/MP4** → H.264 MP4
 
-JPEG, PNG, WebP, H.264 MP4, and WebM are served unchanged. The first play of a new HEVC clip can take a little while; after that it is instant.
+JPEG, PNG, WebP, H.264 MP4, and WebM are served unchanged. The first play of a new HEVC clip can take a little while; after that it reads the disk file. Cache files for photos you have removed are deleted automatically. You can also delete `.cache` yourself; it will be rebuilt as needed.
