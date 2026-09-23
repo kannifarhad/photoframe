@@ -5,21 +5,34 @@ Gallery captions come from each file’s metadata:
 - **Photos** — EXIF/IPTC GPS and capture date
 - **MOV/MP4** — QuickTime GPS and creation date
 
-Files with no usable metadata stay unlabeled.
+Files with no usable metadata stay unlabeled until you fill them in.
 
-## Filename overrides
+## Captions file
 
-If the embedded data is wrong or missing, put the correct values in **brackets** in the filename. Brackets win over metadata. You can set location, date, or both, on photos and videos:
+`photos/metadata.json` lists every image and video. The app creates it and fills in what it can find. Anything you type there is kept. A `null` field is tried again on the next refresh, including another OpenStreetMap lookup when GPS exists but the last request failed.
+
+```json
+{
+  "IMG_2429.MOV": {
+    "location": "Athens, Greece",
+    "takenAt": "2024-04-23"
+  },
+  "DSC_2655.JPG": {
+    "location": null,
+    "takenAt": "2021-05-26"
+  }
+}
+```
+
+- `takenAt` is `YYYY-MM-DD`
+- `location` is shown as written
+- Delete a value, or set it back to `null`, to let the app detect it again
+
+Filename brackets still fill an empty field the first time, then that value is saved in `metadata.json`:
 
 ```text
 dinner [2023-10-09 | Baku, Azerbaijan].jpg
-clip [Athens, Greece].MOV
-DSC_2655 [2021-05-26].JPG
 ```
-
-- Date must be `YYYY-MM-DD` (dots or underscores are also fine: `2023.10.09`, `2023_10_09`)
-- Location is free text and is shown as written (for example `Athens, Greece` instead of a GPS suburb)
-- Two bracket groups also work: `clip [2024-08-16] [Rome, Italy].MOV`
 
 Point `MEDIA_DIR` at the folder of images and videos (see `.env.example`).
 

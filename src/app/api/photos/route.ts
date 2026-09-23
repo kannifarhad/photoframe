@@ -1,7 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { pruneDerivedCache, warmupPlayable } from "@/lib/derived-media";
 import { getMediaDir, isAllowedMediaName, resolveMediaFile } from "@/lib/media";
-import { metadataForMediaFile, pruneMetadataCache } from "@/lib/photo-location";
+import { libraryMetadata } from "@/lib/photo-location";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,22 +21,21 @@ export async function GET() {
     );
 
     const names = files.map((entry) => entry.name);
-    pruneMetadataCache(names);
     void pruneDerivedCache(names);
 
-    const photos = await Promise.all(
-      files.map(async (entry) => {
-        const src = `/api/photos/file?name=${encodeURIComponent(entry.name)}`;
-        const filePath = resolveMediaFile(entry.name);
-        if (filePath) {
-          warmupPlayable(filePath, entry.name);
-        }
-        const meta = filePath
-          ? await metadataForMediaFile(filePath, entry.name)
-          : { location: null, takenAt: null };
-        return { src, ...meta };
-      }),
-    );
+    const ready = files.flatMap((entry) => {
+      const filePath = resolveMediaFile(entry.name);
+      if (!filePath) {
+        return [];
+      }
+      warmupPlayable(filePath, entry.name);
+      return [{ name: entry.name, filePath }];
+    });
+    const metas = await libraryMetadata(ready);
+    const photos = ready.map((file, index) => ({
+      src: `/api/photos/file?name=${encodeURIComponent(file.name)}`,
+      ...metas[index],
+    }));
 
     return Response.json(photos, { headers: NO_STORE_HEADERS });
   } catch (error) {
